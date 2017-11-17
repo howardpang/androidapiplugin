@@ -1,0 +1,63 @@
+apply plugin: 'java'
+
+group="${export_annotation_group}"
+
+ext {
+    bintrayName = 'export-annotation'
+    artifact = bintrayName
+    libraryName = 'Export annotation'
+    libraryDescription = 'The annotation used in api'
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+}
+
+sourceCompatibility = "1.7"
+targetCompatibility = "1.7"
+
+apply from: '../publish_java.gradle'
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId "${export_annotation_group}"
+            artifactId "${export_annotation_name}"
+            // Tell maven to prepare the generated "*.aar" file for publishing
+            artifact("$buildDir/libs/${project.getName()}-${version}.jar")
+
+            pom.withXml {
+                //Creating additional node for dependencies
+                def dependenciesNode = asNode().appendNode('dependencies')
+
+                //Defining configuration names from which dependencies will be taken (debugCompile or releaseCompile and compile)
+                def configurationNames = ['compile']
+
+                configurationNames.each { configurationName ->
+                    configurations[configurationName].allDependencies.each {
+                        if (it.group != null && it.name != null) {
+                            def dependencyNode = dependenciesNode.appendNode('dependency')
+                            dependencyNode.appendNode('groupId', it.group)
+                            dependencyNode.appendNode('artifactId', it.name)
+                            dependencyNode.appendNode('version', it.version)
+
+                            //If there are any exclusions in dependency
+                            if (it.excludeRules.size() > 0) {
+                                def exclusionsNode = dependencyNode.appendNode('exclusions')
+                                it.excludeRules.each { rule ->
+                                    def exclusionNode = exclusionsNode.appendNode('exclusion')
+                                    exclusionNode.appendNode('groupId', rule.group)
+                                    exclusionNode.appendNode('artifactId', rule.module)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+}
+
+publish.dependsOn build
+publishToMavenLocal.dependsOn build

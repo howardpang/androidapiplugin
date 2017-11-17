@@ -1,0 +1,86 @@
+apply plugin: 'groovy'
+repositories {
+    maven { url 'http://repo.yypm.com:8181/nexus/content/groups/public' }
+    maven { url 'plugins'}
+}
+
+dependencies {
+    compile gradleApi()
+    compile localGroovy()
+}
+
+configurations {
+    provided
+}
+
+sourceSets {
+    main {
+        compileClasspath += configurations.provided
+    }
+}
+
+dependencies {
+    if (gradle.startParameter.projectDir == project.projectDir) {
+        // gradlew -p buildSrc xx
+        provided 'com.android.tools.build:gradle:2.2.1'
+    } else {
+        compile 'com.android.tools.build:gradle:2.2.1'
+    }
+    compile 'com.squareup:javapoet:1.8.0'
+}
+
+tasks.withType(GroovyCompile) {
+    sourceCompatibility = '1.7'
+    targetCompatibility = '1.7'
+}
+
+task generateBuildConfig << {
+    Properties props = new Properties()
+    String export_annotation_group
+    String export_annotation_name
+    String version
+    String group
+
+    InputStream is = new FileInputStream("${project.rootDir.path}/../gradle.properties")
+    props.load(is)
+    export_annotation_group = props.getProperty("export_annotation_group")
+    export_annotation_name = props.getProperty("export_annotation_name")
+    version = props.getProperty("version")
+    group = props.getProperty("gradle_plugin_group")
+    is.close()
+    File buildConfigDir = new File(buildDir, "buildConfig")
+    File buildConfigFile = new File(buildConfigDir, "com/yy/android/gradle/javaapi/BuildConfig.java")
+    buildConfigFile.parentFile.mkdirs()
+    if (buildConfigFile.exists())buildConfigFile.delete()
+    buildConfigFile.createNewFile()
+
+    def pw = buildConfigFile.newPrintWriter()
+
+    pw.println """/* AUTO-GENERATED FILE.  DO NOT MODIFY.
+ *
+ * This class was automatically generated
+ * It should not be modified by hand.
+ */
+package com.yy.android.gradle.javaapi;
+
+public final class BuildConfig {
+"""
+    pw.println("    public static final String EXPORT_ANNOTATION_PROCESSOR_CLASS = \"com.yy.android.gradle.javaapi.ExportProcessor\"; ")
+    pw.println("    public static final String EXPORT_ANNOTATION_CLASS = \"com.yy.android.annotation.Export\"; ")
+    pw.println("    public static final String EXPORT_ANNOTATION_MODULE_GROUP = \"${export_annotation_group}\"; ")
+    pw.println("    public static final String EXPORT_ANNOTATION_MODULE_NAME = \"${export_annotation_name}\"; ")
+    pw.println("    public static final String GROUP = \"${group}\"; ")
+    pw.println("    public static final String NAME = \"${project.name}\"; ")
+    pw.println("    public static final String VERSION = \"${version}\"; ")
+    pw.println '}'
+    pw.flush()
+    pw.close()
+
+    sourceSets.main.java.srcDirs += buildConfigDir
+}
+
+tasks.withType(JavaCompile) { compileTask ->
+    compileTask.dependsOn generateBuildConfig
+}
+
+

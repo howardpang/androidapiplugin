@@ -1,0 +1,52 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    repositories {
+        maven { url 'http://repo.yypm.com:8181/nexus/content/groups/public' }
+        maven { url 'plugins'}
+    }
+    dependencies {
+        classpath 'net.researchgate:gradle-release:2.0.2'
+        classpath 'com.android.tools.build:gradle:2.2.1'
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+allprojects {
+    repositories {
+        maven { url 'http://repo.yypm.com:8181/nexus/content/groups/public' }
+        mavenLocal()
+    }
+}
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+subprojects {
+    tasks.withType(Javadoc).all { enabled = false }
+}
+
+//apply plugin: 'net.researchgate.release'
+
+/*
+release {
+    failOnUnversionedFiles = false
+    failOnUpdateNeeded = false
+}
+
+*/
+
+apply from: 'publish_java.gradle'
+
+publishing {
+    publications {
+        gradlePlugin(MavenPublication) {
+            groupId "${gradle_plugin_group}"
+            artifactId "${gradle_plugin_name}"
+
+            File jar = new File(projectDir, "buildSrc/build/libs/${gradle_plugin_name}.jar")
+            artifact jar
+        }
+    }
+}
+

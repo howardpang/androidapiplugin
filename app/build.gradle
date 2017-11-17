@@ -1,0 +1,42 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.yy.android.gradle.import'
+
+android {
+    compileSdkVersion "${compile_sdk_version}" as Integer
+    buildToolsVersion "${build_tools_version}"
+    defaultConfig {
+        applicationId "com.myapplication"
+        minSdkVersion "${min_sdk_version}" as Integer
+        targetSdkVersion "${target_sdk_version}" as Integer
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+     sourceSets {
+         main {
+             jniLibs.srcDirs = ['src/main/libs']
+             jni.srcDirs = [] //disable automatic ndk-build call
+         }
+     }
+
+    signingConfigs {
+
+    }
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    //compile 'com.android.support:support-v4:23.2.1'
+    compile("${demo_library_group}:${demo_library_name}:${version}")
+}
+

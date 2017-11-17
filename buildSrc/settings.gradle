@@ -1,0 +1,8 @@
+Properties props = new Properties()
+String name
+String rootPropertiesPath = "${rootProject.projectDir.path}/../gradle.properties"
+InputStream is = new FileInputStream(rootPropertiesPath)
+props.load(is)
+name = props.getProperty("gradle_plugin_name")
+is.close()
+rootProject.name = name
