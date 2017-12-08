@@ -1,5 +1,5 @@
 apply plugin: 'com.android.library'
-apply plugin: 'com.yy.android.gradle.export'
+//apply plugin: 'com.yy.android.gradle.export'
 
 android {
     compileSdkVersion "${compile_sdk_version}" as Integer

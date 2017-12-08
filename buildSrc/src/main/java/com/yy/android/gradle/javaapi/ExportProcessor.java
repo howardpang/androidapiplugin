@@ -45,6 +45,8 @@ import javax.lang.model.util.Elements;
 
 import com.yy.android.gradle.javaapi.BuildConfig;
 
+import static javax.tools.Diagnostic.Kind.WARNING;
+
 public class ExportProcessor extends AbstractProcessor  {
     private Filer mFiler; //文件相关的辅助类
     private Elements mElementUtils; //元素相关的辅助类
@@ -64,11 +66,11 @@ public class ExportProcessor extends AbstractProcessor  {
         mElementUtils = processingEnv.getElementUtils();
         mMessager = processingEnv.getMessager();
         mHaveDumpElements = new HashSet<>();
-        //processingEnv.getMessager().printMessage(WARNING,  "init " );
+        processingEnv.getMessager().printMessage(WARNING,  "init " );
         Iterator<Map.Entry<String, String>> iterator = processingEnv.getOptions().entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, String> entry = iterator.next();
-            //processingEnv.getMessager().printMessage(WARNING,  "init >> " + entry.getKey() + ":" + entry.getValue());
+            processingEnv.getMessager().printMessage(WARNING,  "init >> " + entry.getKey() + ":" + entry.getValue());
             if (entry.getKey().equals(JAVA_SRC_DIRS_OPTION)) {
                 String[] dirs = entry.getValue().split(";");
                 mJavaSrcDirs = new ArrayList<>();

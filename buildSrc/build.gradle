@@ -22,9 +22,9 @@ sourceSets {
 dependencies {
     if (gradle.startParameter.projectDir == project.projectDir) {
         // gradlew -p buildSrc xx
-        provided 'com.android.tools.build:gradle:2.2.1'
+        provided 'com.android.tools.build:gradle:3.0.0'
     } else {
-        compile 'com.android.tools.build:gradle:2.2.1'
+        compile 'com.android.tools.build:gradle:3.0.0'
     }
     compile 'com.squareup:javapoet:1.8.0'
 }
