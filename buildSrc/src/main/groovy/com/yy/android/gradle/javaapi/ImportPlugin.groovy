@@ -233,9 +233,8 @@ public class ImportPlugin implements Plugin<Project> {
     }
 
     private boolean createIdeaLibraryFile(def d) {
-        VersionNumber gradleVersion = VersionNumber.parse(com.android.builder.Version.ANDROID_GRADLE_PLUGIN_VERSION)
-        VersionNumber gradle231Version = new VersionNumber(2, 3, 1, "")
         File librariesDir = new File(project.rootDir, ".idea/libraries")
+        if (!librariesDir.exists()) librariesDir.mkdirs()
 
         String fileName = d.group + "_" + d.name + "_" + d.version
         fileName = fileName.replaceAll("[^a-zA-Z0-9]+", "_") + ".xml"
@@ -285,7 +284,7 @@ public class ImportPlugin implements Plugin<Project> {
             pw.close()
         }
 
-        println("nnnnnnnnnnnnn " + d.group + ":" + d.name + ":" + d.version + " >> shouldCreate: " + shouldCreate + " overwrite: " + overwrite)
+        //println("nnnnnnnnnnnnn " + d.group + ":" + d.name + ":" + d.version + " >> shouldCreate: " + shouldCreate + " overwrite: " + overwrite)
         return shouldCreate
     }
 
