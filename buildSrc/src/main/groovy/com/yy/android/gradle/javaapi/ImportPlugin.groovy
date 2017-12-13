@@ -33,87 +33,86 @@ public class ImportPlugin implements Plugin<Project> {
 
         project.extensions.create('javaApiImport', com.yy.android.gradle.javaapi.ImportExtension.class)
         ImportExtension javaApiImport = project.javaApiImport
-        project.afterEvaluate {
-            boolean isApp = false
-            if (android.class.name.find("com.android.build.gradle.AppExtension") != null) {
-                isApp = true
-            } else if (android.class.name.find("com.android.build.gradle.LibraryExtension") == null) {
-                return
+
+        def exportDepencies = new HashSet<>()
+        def otherDependencies = new HashSet<>()
+        project.subprojects.each { subprj ->
+            subprj.afterEvaluate {
+                boolean isApp
+                com.android.build.gradle.BaseExtension android = subprj.android
+                if (android.class.name.find("com.android.build.gradle.AppExtension") != null) {
+                    isApp = true
+                } else if (android.class.name.find("com.android.build.gradle.LibraryExtension") != null) {
+                    isApp = false
+                }else {
+                    return
+                }
+
+                //println("9999999999999999 " + android.getBootClasspath()[0])
+
+                def variants
+                if (isApp) {
+                    variants = android.applicationVariants
+                } else {
+                    variants = android.libraryVariants
+                }
+
+                variants.all { BaseVariant variant ->
+                    subprj.tasks["process${variant.name.capitalize()}Manifest"].finalizedBy subprj.task("LibraryImport${variant.name.capitalize()}").doFirst {
+                        if (javaApiImport.hookAutoImport) {
+                            if (variant.name.capitalize() == "Release") {
+                                javaApiImport.hookAutoImport = false
+                            }
+                        }
+                        def compileDependencies = new HashSet()
+                        collectCompileDependencies(variant, compileDependencies)
+                        Map<File, File> replaceFiles = new HashMap<>()
+
+                        compileDependencies.each {
+                            boolean isExportDependency = false
+                            if (it.exploded_aar != null) {
+                                File jarFile = new File(it.exploded_aar, "jars/classes.jar")
+                                File exportJarFile = new File(it.exploded_aar, "exportJar/classes.jar")
+                                if (exportJarFile.exists() && jarFile.exists()) {
+                                    replaceFiles.put(jarFile, exportJarFile)
+                                    exportDepencies.add(it)
+                                    isExportDependency = true
+                                }
+                            }
+                            if (!isExportDependency) {
+                                otherDependencies.add(it)
+                            }
+                        }
+
+                        if (!replaceFiles.isEmpty()) {
+                            variant.javaCompile.classpath -= subprj.files(replaceFiles.keySet())
+                            variant.javaCompile.classpath += subprj.files(replaceFiles.values())
+                        }
+                    }
+                }
             }
+        }
+        project.rootProject.gradle.buildFinished { result ->
+            if (exportDepencies.size() > 0 && javaApiImport.hookAutoImport) {
+                def ideaLibraryInfos = new HashSet()
+                exportDepencies.each {
+                    ideaLibraryInfos.add(collectIdeaLibraryFileInfo(it))
+                }
+                boolean shouldCreateOtherIdeaLibraryFile = false
 
-            //println("9999999999999999 " + android.getBootClasspath()[0])
-
-            def variants
-            if (isApp) {
-                variants = android.applicationVariants
-            } else {
-                variants = android.libraryVariants
-            }
-
-            variants.all { BaseVariant variant ->
-                variant.mergeResources.finalizedBy project.task("LibraryImport${variant.name}").doFirst {
-                    if (javaApiImport.hookAutoImport) {
-                        if (variant.name.capitalize() == "Release") {
-                            javaApiImport.hookAutoImport = false
-                        }
+                ideaLibraryInfos.each {
+                    if (createIdeaLibraryFile(it)) {
+                        shouldCreateOtherIdeaLibraryFile = true
                     }
-                    def compileDependencies = new HashSet()
-                    collectCompileDependencies(variant, compileDependencies)
-                    Map<File, File> replaceFiles = new HashMap<>()
-                    def exportDepencies = new HashSet<>()
-                    def otherDependencies = new HashSet<>()
-
-                    compileDependencies.each {
-                        boolean isExportDependency = false
-                        if (it.exploded_aar != null) {
-                            File jarFile = new File(it.exploded_aar, "jars/classes.jar")
-                            File exportJarFile = new File(it.exploded_aar, "exportJar/classes.jar")
-                            if (exportJarFile.exists() && jarFile.exists()) {
-                                replaceFiles.put(jarFile, exportJarFile)
-                                exportDepencies.add(it)
-                                isExportDependency = true
-                            }
-                        }
-                        if (!isExportDependency) {
-                            otherDependencies.add(it)
-                        }
+                }
+                if (shouldCreateOtherIdeaLibraryFile) {
+                    ideaLibraryInfos.clear()
+                    otherDependencies.each {
+                        ideaLibraryInfos.add(collectIdeaLibraryFileInfo(it))
                     }
 
-                    if (!replaceFiles.isEmpty()) {
-                        variant.javaCompile.classpath -= project.files(replaceFiles.keySet())
-                        variant.javaCompile.classpath += project.files(replaceFiles.values())
-                    }
-
-                    project.rootProject.gradle.buildFinished { result ->
-                        if (exportDepencies.size() > 0 && javaApiImport.hookAutoImport) {
-                            def ideaLibraryInfos = new HashSet()
-                            exportDepencies.each {
-                                ideaLibraryInfos.add(collectIdeaLibraryFileInfo(it))
-                            }
-                            boolean shouldCreateOtherIdeaLibraryFile = false
-
-                            ideaLibraryInfos.each {
-                                if (createIdeaLibraryFile(it)) {
-                                    shouldCreateOtherIdeaLibraryFile = true
-                                }
-                            }
-                            if (shouldCreateOtherIdeaLibraryFile) {
-                                Set<Project> subprojects = project.rootProject.subprojects
-                                subprojects.remove(project)
-                                subprojects.each {
-                                    BaseVariant prjVariant = it.android.libraryVariants.find { it.name == variant.name}
-                                    collectCompileDependencies(prjVariant, otherDependencies)
-                                }
-                                ideaLibraryInfos.clear()
-                                otherDependencies.each {
-                                    ideaLibraryInfos.add(collectIdeaLibraryFileInfo(it))
-                                }
-
-                                ideaLibraryInfos.each {
-                                    createIdeaLibraryFile(it)
-                                }
-                            }
-                        }
+                    ideaLibraryInfos.each {
+                        createIdeaLibraryFile(it)
                     }
                 }
             }
@@ -174,10 +173,6 @@ public class ImportPlugin implements Plugin<Project> {
             }
         }
         return findResult == null ? null : findResult.file
-    }
-
-    protected com.android.build.gradle.BaseExtension getAndroid() {
-        return project.android
     }
 
     private String getNameWithoutExtension(File file) {
@@ -322,7 +317,7 @@ public class ImportPlugin implements Plugin<Project> {
             pw.close()
         }
 
-        //println("nnnnnnnnnnnnn " + d.group + ":" + d.name + ":" + d.version + " >> shouldCreate: " + shouldCreate + " overwrite: " + overwrite)
+        println("nnnnnnnnnnnnn " + d.group + ":" + d.name + ":" + d.version + " >> shouldCreate: " + shouldCreate + " overwrite: " + overwrite)
         return shouldCreate
     }
 

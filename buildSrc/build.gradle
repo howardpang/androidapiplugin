@@ -53,6 +53,13 @@ task generateBuildConfig << {
     buildConfigFile.parentFile.mkdirs()
     if (buildConfigFile.exists())buildConfigFile.delete()
     buildConfigFile.createNewFile()
+    if (export_annotation_group == null) {
+        export_annotation_group = "com.yy.android.annotation"
+    }
+
+    if (export_annotation_name == null) {
+        export_annotation_name = "export"
+    }
 
     def pw = buildConfigFile.newPrintWriter()
 

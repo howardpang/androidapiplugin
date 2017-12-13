@@ -5,4 +5,7 @@ InputStream is = new FileInputStream(rootPropertiesPath)
 props.load(is)
 name = props.getProperty("gradle_plugin_name")
 is.close()
+if (name == null) {
+    name = "gradle-javaapi"
+}
 rootProject.name = name

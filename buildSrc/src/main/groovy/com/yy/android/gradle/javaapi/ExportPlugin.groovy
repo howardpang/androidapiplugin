@@ -56,7 +56,9 @@ public class ExportPlugin implements Plugin<Project> {
 
         if (project.rootProject.subprojects.find{ it.name == "export_annotation"} == null) {
             //!! Note, we auto add 'Export' annotation to project, so user no need add it manually
-            project.dependencies.add("compile", "${BuildConfig.EXPORT_ANNOTATION_MODULE_GROUP}:${BuildConfig.EXPORT_ANNOTATION_MODULE_NAME}:${thisVersion}")
+            if (thisVersion != null) {
+                project.dependencies.add("compile", "${BuildConfig.EXPORT_ANNOTATION_MODULE_GROUP}:${BuildConfig.EXPORT_ANNOTATION_MODULE_NAME}:${thisVersion}")
+            }
         }
 
         project.afterEvaluate {
