@@ -26,7 +26,7 @@ import com.yy.android.gradle.javaapi.BuildConfig
 
 public class ExportPlugin implements Plugin<Project> {
 
-    private static final String EXPORT_JAR_DIR = "exportJar"
+    public static final String EXPORT_JAR_DIR = "exportJar"
     //private static final String GROUP = "com.yy.android.gradle.build.tool"
     //private static final String NAME = "gradle-javaapi"
     //private static final String EXPORT_ANNOTATION_MODULE_GROUP = "com.yy.android.annotation"
@@ -86,8 +86,9 @@ public class ExportPlugin implements Plugin<Project> {
                 Zip bundle = project.tasks["bundle${variant.name.capitalize()}"]
                 File exportClassDir = new File(project.buildDir, "intermediates/exportClasses/${variant.name}")
                 variant.javaCompile.options.compilerArgs += [
-                        '-processorpath', thisJarPath,
-                        '-processor', BuildConfig.EXPORT_ANNOTATION_PROCESSOR_CLASS,
+                        "-proc:only",
+                        "-processorpath", thisJarPath,
+                        "-processor", BuildConfig.EXPORT_ANNOTATION_PROCESSOR_CLASS ,
                         "-A${ExportProcessor.JAVA_SRC_DIRS_OPTION}=${javaSrcDirs.join(";")}",
                         "-A${ExportProcessor.EXPORT_CLASS_DIR_OPTION}=${exportClassDir.path}"
                 ]

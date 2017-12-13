@@ -15,13 +15,14 @@
  */
 package com.yy.android.gradle.javaapi
 
-import com.yy.android.gradle.javaapi.util.DependenciesUtils
 import org.gradle.api.Project
 import org.gradle.api.Plugin
 import com.android.build.gradle.api.BaseVariant
-import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.file.FileTree
-import org.gradle.util.VersionNumber
+import org.gradle.api.artifacts.ArtifactCollection
+import com.android.build.gradle.internal.publishing.AndroidArtifacts.ArtifactScope
+import com.android.build.gradle.internal.publishing.AndroidArtifacts.ArtifactType
+import com.android.build.gradle.internal.publishing.AndroidArtifacts.ConsumedConfigType
 
 public class ImportPlugin implements Plugin<Project> {
 
@@ -50,35 +51,27 @@ public class ImportPlugin implements Plugin<Project> {
             }
 
             variants.all { BaseVariant variant ->
-                variant.mergeResources.finalizedBy project.task("SmallIport${variant.name}").doFirst {
-                    Set<ResolvedDependency> compileResolveDepencies = DependenciesUtils.getAllResolveDependencies(project, "compile")
-                    Map<File, File> replaceFiles = new HashMap<>()
-                    Set<ResolvedDependency> exportDepencies = new HashSet<>()
-                    Set<ResolvedDependency> otherDependencies = new HashSet<>()
+                variant.mergeResources.finalizedBy project.task("LibraryImport${variant.name}").doFirst {
                     if (javaApiImport.hookAutoImport) {
                         if (variant.name.capitalize() == "Release") {
                             javaApiImport.hookAutoImport = false
                         }
                     }
-                    compileResolveDepencies.each {
-                        collectIdeaLibraryFileInfo(it)
-                        def version = it.moduleVersion
-                        def name = it.moduleName
-                        def group = it.moduleGroup
+                    def compileDependencies = new HashSet()
+                    collectCompileDependencies(variant, compileDependencies)
+                    Map<File, File> replaceFiles = new HashMap<>()
+                    def exportDepencies = new HashSet<>()
+                    def otherDependencies = new HashSet<>()
+
+                    compileDependencies.each {
                         boolean isExportDependency = false
-                        if (it.moduleArtifacts.size() > 0) {
-                            it.moduleArtifacts.each { a ->
-                                if (a.extension == "aar") {
-                                    String classifier = a.classifier ? a.classifier : ""
-                                    File aarDir = new File(project.buildDir, "intermediates/exploded-aar/${group}/${name}/${version}/${classifier}")
-                                    File jarFile = new File(aarDir, "jars/classes.jar")
-                                    File exportJarFile = new File(aarDir, "exportJar/classes.jar")
-                                    if (exportJarFile.exists() && jarFile.exists()) {
-                                        replaceFiles.put(jarFile, exportJarFile)
-                                        exportDepencies.add(it)
-                                        isExportDependency = true
-                                    }
-                                }
+                        if (it.exploded_aar != null) {
+                            File jarFile = new File(it.exploded_aar, "jars/classes.jar")
+                            File exportJarFile = new File(it.exploded_aar, "exportJar/classes.jar")
+                            if (exportJarFile.exists() && jarFile.exists()) {
+                                replaceFiles.put(jarFile, exportJarFile)
+                                exportDepencies.add(it)
+                                isExportDependency = true
                             }
                         }
                         if (!isExportDependency) {
@@ -105,7 +98,12 @@ public class ImportPlugin implements Plugin<Project> {
                                 }
                             }
                             if (shouldCreateOtherIdeaLibraryFile) {
-                                otherDependencies.addAll(collectOtherProjectDependencies())
+                                Set<Project> subprojects = project.rootProject.subprojects
+                                subprojects.remove(project)
+                                subprojects.each {
+                                    BaseVariant prjVariant = it.android.libraryVariants.find { it.name == variant.name}
+                                    collectCompileDependencies(prjVariant, otherDependencies)
+                                }
                                 ideaLibraryInfos.clear()
                                 otherDependencies.each {
                                     ideaLibraryInfos.add(collectIdeaLibraryFileInfo(it))
@@ -122,19 +120,64 @@ public class ImportPlugin implements Plugin<Project> {
         }
     }
 
-    protected com.android.build.gradle.BaseExtension getAndroid() {
-        return project.android
+    private def collectCompileDependencies(BaseVariant variant, def compileDependencies) {
+        if (variant == null) {
+            return null
+        }
+        ArtifactCollection jars = variant.variantData.scope.getArtifactCollection(ConsumedConfigType.COMPILE_CLASSPATH, ArtifactScope.EXTERNAL, ArtifactType.JAR)
+        ArtifactCollection aars = variant.variantData.scope.getArtifactCollection(ConsumedConfigType.COMPILE_CLASSPATH, ArtifactScope.EXTERNAL, ArtifactType.AAR)
+        ArtifactCollection exploded_aars = variant.variantData.scope.getArtifactCollection(ConsumedConfigType.COMPILE_CLASSPATH, ArtifactScope.EXTERNAL, ArtifactType.EXPLODED_AAR)
+        jars.artifacts.each {
+            def splitResult = it.getId().componentIdentifier.displayName.split(":")
+            def version = ""
+            def name = ""
+            def group = ""
+            if (splitResult.length > 2) {
+                version = splitResult[2]
+                name = splitResult[1]
+                group = splitResult[0]
+            } else if (splitResult.length > 1) {
+                name = splitResult[1]
+                group = splitResult[0]
+            } else if (splitResult.length > 0) {
+                name = splitResult[0]
+            }
+            if (compileDependencies.find{ it.group == group && it.name == name && it.version == version } != null) {
+                return
+            }
+            def aar = getArtifactFile(group, name, version, aars)
+            def exploded_aar = getArtifactFile(group, name, version, exploded_aars)
+            def info = [group: group, name: name, version: version, aar: aar, exploded_aar: exploded_aar, jar: it.file]
+            compileDependencies.add(info)
+        }
+        return compileDependencies
     }
 
-    private Set<ResolvedDependency> collectOtherProjectDependencies() {
-        Set<Project> subprojects = project.rootProject.subprojects
-        subprojects.remove(project)
-        Set<ResolvedDependency> subprojectsDependencies = new HashSet<>()
-        subprojects.each { p ->
-            Set<ResolvedDependency> dependencies = DependenciesUtils.getAllResolveDependencies(p, "compile")
-            subprojectsDependencies.addAll(dependencies)
+    private File getArtifactFile(String group, String name, String version, ArtifactCollection artifactCollection ) {
+        def findResult = artifactCollection.artifacts.find {
+            def splitResult = it.getId().componentIdentifier.displayName.split(":")
+            def v = ""
+            def n = ""
+            def g = ""
+            if (splitResult.length > 2) {
+                v = splitResult[2]
+                n = splitResult[1]
+                g = splitResult[0]
+            } else if (splitResult.length > 1) {
+                n = splitResult[1]
+                g = splitResult[0]
+            } else if (splitResult.length > 0) {
+                n = splitResult[0]
+            }
+            if (group == g && name == n && version == v) {
+                return true
+            }
         }
-        return subprojectsDependencies
+        return findResult == null ? null : findResult.file
+    }
+
+    protected com.android.build.gradle.BaseExtension getAndroid() {
+        return project.android
     }
 
     private String getNameWithoutExtension(File file) {
@@ -153,7 +196,7 @@ public class ImportPlugin implements Plugin<Project> {
     }
 
     private File  findArtifactFilePath(File libraryPath, String fileNameSuffix) {
-        if (!libraryPath.isFile()) {
+        if ( libraryPath== null || !libraryPath.isFile()) {
             return null
         }
         File parentPath = libraryPath.getParentFile()
@@ -182,41 +225,36 @@ public class ImportPlugin implements Plugin<Project> {
         }
     }
 
-    private def collectIdeaLibraryFileInfo(ResolvedDependency d) {
+    private def collectIdeaLibraryFileInfo(def d) {
         String replaceJarInfo = null
         Set<String> jarsInfo = new HashSet<>()
         File docFile = null
         File sourceFile = null
-        String moduleVersion = d.moduleVersion
-        d.moduleArtifacts.each {
-            if (it.type == "aar") {
-                docFile = findArtifactFilePath(it.file, "-javadoc.jar")
-                sourceFile = findArtifactFilePath(it.file, "-sources.jar")
-                String classifier = it.classifier ? "${it.classifier}/" : ""
-                File aarArtifactsDir = new File(project.buildDir, "intermediates/exploded-aar/${d.moduleGroup}/${d.moduleName}/${d.moduleVersion}/${classifier}")
-                File explortJar = new File(aarArtifactsDir, "${ExportPlugin.EXPORT_JAR_DIR}/classes.jar")
-                jarsInfo.add("file://\$PROJECT_DIR\$/" +  project.name + "/build/intermediates/exploded-aar/${d.moduleGroup}/${d.moduleName}/${d.moduleVersion}/${classifier}res")
-                if (explortJar.exists()) {
-                    jarsInfo.add("jar://\$PROJECT_DIR\$/" +  project.name + "/build/intermediates/exploded-aar/${d.moduleGroup}/${d.moduleName}/${d.moduleVersion}/${classifier}${ExportPlugin.EXPORT_JAR_DIR}/classes.jar!/")
-                    replaceJarInfo = "jar://\$PROJECT_DIR\$/" +  project.name + "/build/intermediates/exploded-aar/${d.moduleGroup}/${d.moduleName}/${d.moduleVersion}/${classifier}jars/classes.jar!/"
-                    FileTree jars = project.fileTree(new File(aarArtifactsDir.path, "jars")).include("**/*.jar").exclude("*.jar")
-                    jars.each {
-                        String subName = it.path.substring(project.rootDir.path.length(), it.path.length())
-                        jarsInfo.add("jar://\$PROJECT_DIR\$" + subName.replace("\\", "/") + "!/")
-                    }
-                }else {
-                    FileTree jars = project.fileTree(new File(aarArtifactsDir.path, "jars")).include("**/*.jar")
-                    jars.each {
-                        String subName = it.path.substring(project.rootDir.path.length(), it.path.length())
-                        jarsInfo.add("jar://\$PROJECT_DIR\$" + subName.replace("\\", "/") + "!/")
-                    }
+        String moduleVersion = d.version
+        if (d.exploded_aar != null) {
+            docFile = findArtifactFilePath(d.aar, "-javadoc.jar")
+            sourceFile = findArtifactFilePath(d.aar, "-sources.jar")
+            File aarArtifactsDir = d.exploded_aar
+            File explortJar = new File(aarArtifactsDir, "${ExportPlugin.EXPORT_JAR_DIR}/classes.jar")
+            jarsInfo.add("file://${aarArtifactsDir.path.replace("\\", "/")}/res")
+            if (explortJar.exists()) {
+                jarsInfo.add("jar://${aarArtifactsDir.path.replace("\\", "/")}/${ExportPlugin.EXPORT_JAR_DIR}/classes.jar!/")
+                replaceJarInfo = ("jar://${aarArtifactsDir.path.replace("\\", "/")}/jars/classes.jar!/")
+                FileTree jars = project.fileTree(new File(aarArtifactsDir.path, "jars")).include("**/*.jar").exclude("*.jar")
+                jars.each {
+                    jarsInfo.add("jar://${it.path.replace("\\", "/")}!/")
                 }
-            }else if(it.type == "jar") {
-                jarsInfo.add("jar://" +  it.file.path.replace("\\", "/") + "!/")
-                docFile = findArtifactFilePath(it.file, "-javadoc.jar")
-                sourceFile = findArtifactFilePath(it.file, "-sources.jar")
-                moduleVersion = moduleVersion + "@jar"
+            } else {
+                FileTree jars = project.fileTree(new File(aarArtifactsDir.path, "jars")).include("**/*.jar")
+                jars.each {
+                    jarsInfo.add("jar://${it.path.replace("\\", "/")}!/")
+                }
             }
+        } else {
+            jarsInfo.add("jar://" + d.jar.path.replace("\\", "/") + "!/")
+            docFile = findArtifactFilePath(d.jar, "-javadoc.jar")
+            sourceFile = findArtifactFilePath(d.jar, "-sources.jar")
+            moduleVersion = moduleVersion + "@jar"
         }
 
         String docInfo
@@ -228,7 +266,7 @@ public class ImportPlugin implements Plugin<Project> {
             sourceInfo = "jar://" + sourceFile.path.replace("\\", "/") + "!/"
         }
 
-        def info = [group: d.moduleGroup, name: d.moduleName, version:moduleVersion, replaceJar:replaceJarInfo, jars: jarsInfo ,doc:docInfo, source: sourceInfo]
+        def info = [group: d.group, name: d.name, version: moduleVersion, replaceJar: replaceJarInfo, jars: jarsInfo, doc: docInfo, source: sourceInfo]
         return info
     }
 
@@ -245,7 +283,7 @@ public class ImportPlugin implements Plugin<Project> {
             if (d.replaceJar != null) {
                 // Should replace jar path
                 def manifestParser = new XmlParser().parse(f)
-                if (manifestParser.library.CLASSES.root.find { it.@url == d.replaceJar } == null) {
+                if (manifestParser.library.CLASSES.root.find { it.@url.indexOf(ExportPlugin.EXPORT_JAR_DIR) != -1 } != null) {
                     overwrite = false
                 }
             } else {

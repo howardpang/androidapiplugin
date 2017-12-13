@@ -29,18 +29,6 @@ import java.security.MessageDigest
 /** Class to resolve project dependencies */
 public final class DependenciesUtils {
 
-    public static generateDependInfo(File dependFile, def allDependencies ) {
-        if (allDependencies != null && allDependencies.size() > 0) {
-            def dependFilePw = new PrintWriter(dependFile.newWriter(false))
-
-            allDependencies.each { d ->
-                dependFilePw.println d.name
-            }
-            dependFilePw.flush()
-            dependFilePw.close()
-        }
-    }
-
     public static Set<ResolvedDependency> getAllResolveDependencies(Project project, String config) {
         Configuration configuration
         try {
@@ -97,18 +85,6 @@ public final class DependenciesUtils {
             if (allDependencies.find { addedNode -> addedNode.group == depend.group && addedNode.name == depend.name } == null) {
                 allDependencies.add(depend)
                 collectProjectDependencies(depend.dependencyProject, allDependencies)
-            }
-        }
-    }
-
-    public static void collectAars(File d, Set outAars) {
-        if (!d.exists()) return
-        d.eachLine { line ->
-            def module = line.split(':')
-            def N = module.size()
-            def aar = [group: module[0], name: module[1], version: (N == 3) ? module[2] : '', jars:null]
-            if (!outAars.contains(aar)) {
-                outAars.add(aar)
             }
         }
     }
