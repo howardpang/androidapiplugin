@@ -89,7 +89,7 @@ tasks.whenTaskAdded { task ->
     if (task.name == "extractReleaseAnnotations" || task.name == "extractDebugAnnotations") {
         task.outputs.upToDateWhen {false}
     }
-    if (task.name == "publishMavenPublicationToMavenRepository" ) {
+    if (task.name == "publishMavenPublicationToMavenRepository" || task.name == "publishMavenPublicationToMavenLocal" ) {
         task.dependsOn "assembleRelease"
     }
 }
